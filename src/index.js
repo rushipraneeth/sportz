@@ -20,11 +20,16 @@ const { broadcastMatchCreated } = attachWebSocketServer(server);
 app.locals.broadcastMatchCreated = broadcastMatchCreated;
 
 
+server.on("error", (error) => {
+  console.error("HTTP Server Error:", error);
+});
+
 server.listen(PORT, HOST, () => {
+  const resolvedPort = server.address().port;
   const baseURL =
       HOST === "0.0.0.0"
-          ? `http://localhost:${PORT}`
-          : `http://${HOST}:${PORT}`;
+          ? `http://localhost:${resolvedPort}`
+          : `http://${HOST}:${resolvedPort}`;
 
   console.log(`Server is running on ${baseURL}`);
   console.log(
