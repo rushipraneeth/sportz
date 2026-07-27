@@ -25,13 +25,13 @@ export const httpArcjet = arcjet({
             mode: arcjetMode,
         }),
 
-        detectBot({
-            mode: arcjetMode,
-            allow: [
-                "CATEGORY:SEARCH_ENGINE",
-                "CATEGORY:PREVIEW",
-            ],
-        }),
+        // detectBot({
+        //     mode: arcjetMode,
+        //     allow: [
+        //         "CATEGORY:SEARCH_ENGINE",
+        //         "CATEGORY:PREVIEW",
+        //     ],
+        // }),
 
         slidingWindow({
             mode: arcjetMode,
@@ -51,13 +51,13 @@ export const wsArcjet = arcjet({
             mode: arcjetMode,
         }),
 
-        detectBot({
-            mode: arcjetMode,
-            allow: [
-                "CATEGORY:SEARCH_ENGINE",
-                "CATEGORY:PREVIEW",
-            ],
-        }),
+        // detectBot({
+        //     mode: arcjetMode,
+        //     allow: [
+        //         "CATEGORY:SEARCH_ENGINE",
+        //         "CATEGORY:PREVIEW",
+        //     ],
+        // }),
 
         slidingWindow({
             mode: arcjetMode,
@@ -73,6 +73,13 @@ export function securityMiddleware() {
     return async (req, res, next) => {
         try {
             const decision = await httpArcjet.protect(req);
+
+            console.log("========== HTTP ARCJET ==========");
+            console.log("Path:", req.method, req.originalUrl);
+            console.log("Denied:", decision.isDenied());
+            console.log("Errored:", decision.isErrored());
+            console.log("Reason:", decision.reason);
+            console.log("=================================");
 
             if (decision.isErrored()) {
                 return res.status(503).json({
@@ -97,7 +104,9 @@ export function securityMiddleware() {
 
             next();
         } catch (err) {
-            console.error("Arcjet Error:", err);
+            console.error("========== ARCJET EXCEPTION ==========");
+            console.error(err);
+            console.error("======================================");
 
             return res.status(503).json({
                 success: false,
