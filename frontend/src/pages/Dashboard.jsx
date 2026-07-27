@@ -25,6 +25,7 @@ const Dashboard = () => {
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [loadingCommentary, setLoadingCommentary] = useState(false);
   const [connectionState, setConnectionState] = useState('Disconnected');
+  const [error, setError] = useState(null);
   
   const commentaryListRef = useRef(null);
   const selectedMatchRef = useRef(selectedMatch);
@@ -75,23 +76,31 @@ const Dashboard = () => {
           }));
         }
       }
+      
+      // Dynamic playback speed:
+      // If there are multiple items in the queue (we are catching up), process them FAST (50ms)
+      // If we are just receiving live events, check at a normal pace
+      const nextDelay = messageQueueRef.current.length > 0 ? 50 : 1000;
+      timeoutId = setTimeout(processQueue, nextDelay);
     };
 
-    // Process one message every 1 second
-    const interval = setInterval(processQueue, 1000);
-    return () => clearInterval(interval);
+    // Start the loop
+    let timeoutId = setTimeout(processQueue, 500);
+    return () => clearTimeout(timeoutId);
   }, []);
 
   useEffect(() => {
     const loadMatches = async () => {
       try {
+        setError(null);
         const data = await fetchMatches();
         setMatches(data);
         if (data.length > 0) {
           handleSelectMatch(data[0]);
         }
-      } catch (error) {
-        console.error('Error loading matches', error);
+      } catch (err) {
+        console.error('Error loading matches', err);
+        setError('Failed to connect to the backend server. Please make sure the server is running and CORS is configured.');
       } finally {
         setLoadingMatches(false);
       }
@@ -132,6 +141,7 @@ const Dashboard = () => {
     messageQueueRef.current = [];
     
     try {
+      setError(null);
       const data = await fetchCommentary(match.id);
       const chronologicalData = [...data].reverse();
       
@@ -146,8 +156,9 @@ const Dashboard = () => {
         const unprocessed = chronologicalData.filter(item => !processedIdsRef.current.has(item.id));
         messageQueueRef.current = [...unprocessed];
       }
-    } catch (error) {
-      console.error('Error fetching initial commentary', error);
+    } catch (err) {
+      console.error('Error fetching initial commentary', err);
+      setError('Failed to fetch commentary data from the backend.');
     } finally {
       setLoadingCommentary(false);
     }
@@ -174,6 +185,12 @@ const Dashboard = () => {
           )}
         </div>
       </header>
+
+      {error && (
+        <div className="error-banner" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '1rem', margin: '1rem', borderRadius: '0.5rem', border: '1px solid #ef4444', textAlign: 'center' }}>
+          {error}
+        </div>
+      )}
 
       <div className="layout-grid">
         <aside className="matches-column">
