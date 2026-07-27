@@ -152,9 +152,49 @@ function broadCastToAll(wss, payload) {
 
 export function attachWebSocketServer(server) {
     const wss = new WebSocketServer({
-        server,
-        path: "/ws",
+        noServer: true,
         maxPayload: 1024 * 1024,
+    });
+
+    server.on("upgrade", async (req, socket, head) => {
+        const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
+        if (url.pathname !== "/ws") {
+            return;
+        }
+
+        const isDebug =
+            process.env.WS_ARCJET_DEBUG === "true" &&
+            process.env.NODE_ENV !== "production";
+
+        if (isDebug) {
+            console.log("⚠ Arcjet check skipped (debug mode)");
+        } else {
+            try {
+                const decision = await wsArcjet.protect(req);
+
+                console.log("========== WS ARCJET (Upgrade) ==========");
+                console.log("IP:", req.socket.remoteAddress);
+                console.log("Denied:", decision.isDenied());
+                console.log("Reason:", decision.reason);
+                console.log("=========================================");
+
+                if (decision.isDenied()) {
+                    socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+                    socket.destroy();
+                    return;
+                }
+            } catch (err) {
+                console.error("Arcjet error during upgrade:", err);
+                socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
+                socket.destroy();
+                return;
+            }
+        }
+
+        wss.handleUpgrade(req, socket, head, (ws) => {
+            wss.emit("connection", ws, req);
+        });
     });
 
     wss.on("error", (error) => {
@@ -167,9 +207,6 @@ export function attachWebSocketServer(server) {
         console.log("IP:", req.socket.remoteAddress);
 
         socket.subscriptions = new Set();
-
-        // Arcjet is disabled temporarily for debugging
-        console.log("⚠ Arcjet check skipped (debug mode)");
 
         console.log("Client connected successfully");
 

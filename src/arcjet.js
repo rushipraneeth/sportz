@@ -25,13 +25,13 @@ export const httpArcjet = arcjet({
             mode: arcjetMode,
         }),
 
-        // detectBot({
-        //     mode: arcjetMode,
-        //     allow: [
-        //         "CATEGORY:SEARCH_ENGINE",
-        //         "CATEGORY:PREVIEW",
-        //     ],
-        // }),
+        detectBot({
+            mode: arcjetMode,
+            allow: [
+                "CATEGORY:SEARCH_ENGINE",
+                "CATEGORY:PREVIEW",
+            ],
+        }),
 
         slidingWindow({
             mode: arcjetMode,
@@ -51,13 +51,13 @@ export const wsArcjet = arcjet({
             mode: arcjetMode,
         }),
 
-        // detectBot({
-        //     mode: arcjetMode,
-        //     allow: [
-        //         "CATEGORY:SEARCH_ENGINE",
-        //         "CATEGORY:PREVIEW",
-        //     ],
-        // }),
+        detectBot({
+            mode: arcjetMode,
+            allow: [
+                "CATEGORY:SEARCH_ENGINE",
+                "CATEGORY:PREVIEW",
+            ],
+        }),
 
         slidingWindow({
             mode: arcjetMode,
@@ -75,7 +75,7 @@ export function securityMiddleware() {
             const decision = await httpArcjet.protect(req);
 
             console.log("========== HTTP ARCJET ==========");
-            console.log("Path:", req.method, req.originalUrl);
+            console.log("Path:", req.method, req.path);
             console.log("Denied:", decision.isDenied());
             console.log("Errored:", decision.isErrored());
             console.log("Reason:", decision.reason);

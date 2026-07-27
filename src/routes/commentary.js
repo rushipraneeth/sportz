@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/db.js";
-import { commentary } from "../db/schema.js";
+import { commentary, matches } from "../db/schema.js";
 import { createCommentarySchema, listCommentaryQuerySchema } from "../validation/commentary.js";
 import { matchIdParamSchema } from "../validation/matches.js";
 import { eq, desc } from "drizzle-orm";
@@ -43,11 +43,11 @@ commentaryRouter.get("/", async (req, res) => {
             data
         });
     } catch (e) {
-        console.error(e);
+        console.error("GET /commentary error:", e);
 
         return res.status(500).json({
             error: "Failed to fetch commentary",
-            details: e.message
+            details: "An unexpected error occurred"
         });
     }
 });
@@ -73,6 +73,19 @@ commentaryRouter.post("/", async (req, res) => {
     }
 
     try {
+        const [match] = await db
+            .select()
+            .from(matches)
+            .where(eq(matches.id, paramsParsed.data.id))
+            .limit(1);
+
+        if (!match) {
+            return res.status(404).json({
+                error: "Match not found.",
+                details: `No match found with ID ${paramsParsed.data.id}`
+            });
+        }
+
         console.log("1. About to insert into DB");
 
         const [result] = await db
@@ -96,11 +109,18 @@ commentaryRouter.post("/", async (req, res) => {
             data: result,
         });
     } catch (e) {
-        console.error(e);
+        console.error("POST /commentary error:", e);
+
+        if (e.cause?.code === "23503") {
+            return res.status(404).json({
+                error: "Match not found.",
+                details: `No match found with ID ${paramsParsed.data.id}`,
+            });
+        }
 
         return res.status(500).json({
             error: "Failed to create commentary",
-            details: e.message,
+            details: "An unexpected error occurred",
         });
     }
 });
