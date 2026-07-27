@@ -74,6 +74,13 @@ export function securityMiddleware() {
         try {
             const decision = await httpArcjet.protect(req);
 
+            console.log("========== HTTP ARCJET ==========");
+            console.log("Path:", req.method, req.path);
+            console.log("Denied:", decision.isDenied());
+            console.log("Errored:", decision.isErrored());
+            console.log("Reason:", decision.reason);
+            console.log("=================================");
+
             if (decision.isErrored()) {
                 return res.status(503).json({
                     success: false,
@@ -97,7 +104,9 @@ export function securityMiddleware() {
 
             next();
         } catch (err) {
-            console.error("Arcjet Error:", err);
+            console.error("========== ARCJET EXCEPTION ==========");
+            console.error(err);
+            console.error("======================================");
 
             return res.status(503).json({
                 success: false,
