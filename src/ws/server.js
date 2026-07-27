@@ -31,6 +31,12 @@ export function attachWebSocketServer(server) {
         if(wsArcjet){
             try{
                 const decision = await wsArcjet.protect(req);
+
+                if (decision.isErrored()) {
+                    socket.close(1011, 'Security service unavailable');
+                    return;
+                }
+
                 if(decision.isDenied()){
                     const code = decision.reason.isRateLimit() ? 1013 : 1008;
                     const reason = decision.reason.isRateLimit() ? 'Rate limit Exceeded' : 'Access Denied';

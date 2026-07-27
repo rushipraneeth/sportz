@@ -19,6 +19,7 @@ const arcjetMode =
 
 export const httpArcjet = arcjet({
     key: arcjetKey,
+    proxies: ["127.0.0.1", "10.0.0.0/8"],
     rules: [
         shield({
             mode: arcjetMode,
@@ -44,6 +45,7 @@ export const httpArcjet = arcjet({
 
 export const wsArcjet = arcjet({
     key: arcjetKey,
+    proxies: ["127.0.0.1", "10.0.0.0/8"],
     rules: [
         shield({
             mode: arcjetMode,
@@ -71,6 +73,13 @@ export function securityMiddleware() {
     return async (req, res, next) => {
         try {
             const decision = await httpArcjet.protect(req);
+
+            if (decision.isErrored()) {
+                return res.status(503).json({
+                    success: false,
+                    error: "Security service unavailable.",
+                });
+            }
 
             if (decision.isDenied()) {
                 if (decision.reason.isRateLimit()) {
