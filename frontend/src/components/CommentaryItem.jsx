@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Goal, Flag, Clock, CircleDot, ShieldAlert,
-  Volleyball, Circle, Square, AlertTriangle
+  Volleyball, Circle, Square, AlertTriangle, RefreshCw, Tv, Target, Timer, XCircle
 } from 'lucide-react';
 import './CommentaryItem.css';
 
@@ -9,6 +9,8 @@ const getEventIcon = (eventType) => {
   switch (eventType.toLowerCase()) {
     case 'goal':
       return <Goal size={16} className="icon-goal" />;
+    case 'own_goal':
+      return <XCircle size={16} className="icon-own-goal" color="#ef4444" />;
     case 'foul':
       return <Flag size={16} className="icon-foul" />;
     case 'timeout':
@@ -22,10 +24,19 @@ const getEventIcon = (eventType) => {
       return <Circle size={16} className="icon-basket" />;
     case 'yellow card':
     case 'yellow_card':
-      return <Square size={16} className="icon-yellow-card" />;
+      return <Square size={16} className="icon-yellow-card" fill="#eab308" color="#eab308" />;
     case 'red card':
     case 'red_card':
-      return <Square size={16} className="icon-red-card" />;
+      return <Square size={16} className="icon-red-card" fill="#ef4444" color="#ef4444" />;
+    case 'substitution':
+      return <RefreshCw size={16} className="icon-substitution" color="#3b82f6" />;
+    case 'penalty':
+      return <Target size={16} className="icon-penalty" color="#f97316" />;
+    case 'var':
+      return <Tv size={16} className="icon-var" color="#8b5cf6" />;
+    case 'half_time':
+    case 'full_time':
+      return <Timer size={16} className="icon-timer" color="#10b981" />;
     case 'tipoff':
     case 'kickoff':
     case 'start':

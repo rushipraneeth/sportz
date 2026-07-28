@@ -20,6 +20,7 @@ const extractPoints = (eventType, metadata) => {
 
 const Dashboard = () => {
   const [matches, setMatches] = useState([]);
+  const [selectedSport, setSelectedSport] = useState('football');
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [commentaryByMatch, setCommentaryByMatch] = useState({});
   const [loadingMatches, setLoadingMatches] = useState(true);
@@ -91,13 +92,16 @@ const Dashboard = () => {
 
   useEffect(() => {
     const loadMatches = async () => {
+      setLoadingMatches(true);
       try {
         setError(null);
-        const data = await fetchMatches();
+        const data = await fetchMatches(selectedSport);
         setMatches(data);
-        if (data.length > 0) {
-          handleSelectMatch(data[0]);
-        }
+        setSelectedMatch(null);
+        setCommentaryByMatch({});
+        messageQueueRef.current = [];
+        processedIdsRef.current.clear();
+        isFirstVisitRef.current.clear();
       } catch (err) {
         console.error('Error loading matches', err);
         setError('Failed to connect to the backend server. Please make sure the server is running and CORS is configured.');
@@ -125,7 +129,7 @@ const Dashboard = () => {
       unsubscribeCommentary();
       socketService.disconnect();
     };
-  }, []);
+  }, [selectedSport]);
 
   useEffect(() => {
     if (commentaryListRef.current) {
@@ -143,22 +147,28 @@ const Dashboard = () => {
     try {
       setError(null);
       const data = await fetchCommentary(match.id);
-      const chronologicalData = [...data].reverse();
+      
+      // Keep data in chronological order for the feed
+      const chronologicalData = [...data];
       
       const isFirstVisit = !isFirstVisitRef.current.has(match.id);
       isFirstVisitRef.current.add(match.id);
       
-      if (isFirstVisit) {
-        // First visit: queue historical data so it slowly plays out from 0
-        messageQueueRef.current = [...chronologicalData];
+      if (match.status.toLowerCase() === 'finished' || ['FT', 'AET', 'PEN'].includes(match.fixtureInfo?.status?.short)) {
+        // Render instantly for finished matches, don't queue slowly
+        setCommentaryByMatch(prev => ({ ...prev, [match.id]: chronologicalData }));
       } else {
-        // Revisit: put the unprocessed events back into the queue so it resumes slowly from where it left off
-        const unprocessed = chronologicalData.filter(item => !processedIdsRef.current.has(item.id));
-        messageQueueRef.current = [...unprocessed];
+        // Slowly playback events for live matches
+        if (isFirstVisit) {
+          messageQueueRef.current = [...chronologicalData];
+        } else {
+          const unprocessed = chronologicalData.filter(item => !processedIdsRef.current.has(item.id || item.externalId));
+          messageQueueRef.current = [...unprocessed];
+        }
       }
     } catch (err) {
-      console.error('Error fetching initial commentary', err);
-      setError('Failed to fetch commentary data from the backend.');
+      console.error('Error fetching initial events', err);
+      setError('Failed to fetch match events from the backend.');
     } finally {
       setLoadingCommentary(false);
     }
@@ -195,43 +205,133 @@ const Dashboard = () => {
       <div className="layout-grid">
         <aside className="matches-column">
           <h2 className="section-title">Current Matches</h2>
+          
+          <div className="sports-selector mb-4" style={{ marginBottom: '1rem' }}>
+            <select 
+              value={selectedSport} 
+              onChange={(e) => setSelectedSport(e.target.value)}
+              style={{ 
+                padding: '0.75rem', 
+                borderRadius: '0.5rem', 
+                width: '100%', 
+                backgroundColor: 'rgba(255, 255, 255, 0.1)', 
+                color: 'white', 
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="football" style={{ color: 'black' }}>⚽ Football</option>
+              <option value="basketball" style={{ color: 'black' }}>🏀 Basketball</option>
+              <option value="volleyball" style={{ color: 'black' }}>🏐 Volleyball</option>
+              <option value="hockey" style={{ color: 'black' }}>🏒 Hockey</option>
+            </select>
+          </div>
+
           {loadingMatches ? (
-            <div className="loading-state">Loading matches...</div>
+            <div className="matches-list">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="skeleton-card glass"></div>
+              ))}
+            </div>
           ) : (
             <div className="matches-list">
-              {matches.map(match => (
-                <MatchCard 
-                  key={match.id} 
-                  match={match} 
-                  isSelected={selectedMatch?.id === match.id}
-                  onClick={() => handleSelectMatch(match)}
-                />
-              ))}
+              {/* LIVE MATCHES */}
+              <h3 className="section-subtitle">🔴 Live Matches</h3>
+              {matches.filter(m => m.status === 'live').length === 0 ? (
+                <div className="empty-state-small">No live {selectedSport} matches at the moment.</div>
+              ) : (
+                matches.filter(m => m.status === 'live').map(match => (
+                  <MatchCard 
+                    key={match.id} 
+                    match={match} 
+                    isSelected={selectedMatch?.id === match.id}
+                    onClick={() => handleSelectMatch(match)}
+                  />
+                ))
+              )}
+
+              {/* UPCOMING MATCHES */}
+              <h3 className="section-subtitle mt-4">🟡 Upcoming Matches</h3>
+              {matches.filter(m => m.status === 'scheduled').length === 0 ? (
+                <div className="empty-state-small">No upcoming {selectedSport} matches today.</div>
+              ) : (
+                matches.filter(m => m.status === 'scheduled').map(match => (
+                  <MatchCard 
+                    key={match.id} 
+                    match={match} 
+                    isSelected={selectedMatch?.id === match.id}
+                    onClick={() => handleSelectMatch(match)}
+                  />
+                ))
+              )}
+
+              {/* FINISHED MATCHES */}
+              <h3 className="section-subtitle mt-4">⚪ Finished Matches</h3>
+              {matches.filter(m => m.status === 'finished').length === 0 ? (
+                <div className="empty-state-small">No finished {selectedSport} matches today.</div>
+              ) : (
+                matches.filter(m => m.status === 'finished').map(match => (
+                  <MatchCard 
+                    key={match.id} 
+                    match={match} 
+                    isSelected={selectedMatch?.id === match.id}
+                    onClick={() => handleSelectMatch(match)}
+                  />
+                ))
+              )}
             </div>
           )}
         </aside>
 
         <main className="commentary-column glass">
           <div className="commentary-header-sticky">
-            <h2 className="section-title mb-0">Live Commentary</h2>
+            <h2 className="section-title mb-0">Match Events</h2>
             {selectedMatch && (
-              <span className="selected-match-name text-accent">
-                {selectedMatch.homeTeam} vs {selectedMatch.awayTeam}
-              </span>
+              <div className="detailed-match-header">
+                <div className="detailed-score-row">
+                   <div className="detailed-team">
+                     {selectedMatch.teamsInfo?.home?.logo && <img src={selectedMatch.teamsInfo.home.logo} alt="Home" />}
+                     <span>{selectedMatch.homeTeam}</span>
+                   </div>
+                   <div className="detailed-score">
+                     {selectedMatch.homeScore} - {selectedMatch.awayScore}
+                   </div>
+                   <div className="detailed-team">
+                     {selectedMatch.teamsInfo?.away?.logo && <img src={selectedMatch.teamsInfo.away.logo} alt="Away" />}
+                     <span>{selectedMatch.awayTeam}</span>
+                   </div>
+                </div>
+                <div className="detailed-meta-row text-accent">
+                   {selectedMatch.league?.name && <span>🏆 {selectedMatch.league.name}</span>}
+                   {selectedMatch.fixtureInfo?.venue?.name && <span>🏟️ {selectedMatch.fixtureInfo.venue.name}</span>}
+                   {selectedMatch.fixtureInfo?.referee && <span>👤 {selectedMatch.fixtureInfo.referee}</span>}
+                </div>
+              </div>
             )}
           </div>
           
           <div className="commentary-list-container" ref={commentaryListRef}>
             {!selectedMatch ? (
-              <div className="empty-state">Select a match to view commentary</div>
+              <div className="empty-state">Select a match to view events</div>
+            ) : selectedMatch.status === 'scheduled' ? (
+              <div className="empty-state">This match has not started yet.</div>
             ) : loadingCommentary ? (
-              <div className="loading-state">Loading previous commentary...</div>
+              <div className="commentary-feed">
+                {[1, 2, 3, 4].map(i => (
+                   <div key={i} className="skeleton-event glass"></div>
+                ))}
+              </div>
             ) : !(commentaryByMatch[selectedMatch.id] && commentaryByMatch[selectedMatch.id].length > 0) && messageQueueRef.current.length === 0 ? (
-              <div className="empty-state">No commentary available for this match yet.</div>
+              <div className="empty-state">
+                {selectedMatch.status.toLowerCase() === 'finished' || ['FT', 'AET', 'PEN'].includes(selectedMatch.fixtureInfo?.status?.short) 
+                  ? "No events are available for this match." 
+                  : "No match events yet."}
+              </div>
             ) : (
               <div className="commentary-feed">
                 {(commentaryByMatch[selectedMatch.id] || []).map((item) => (
-                  <CommentaryItem key={item.id} commentary={item} />
+                  <CommentaryItem key={item.id || item.externalId} commentary={item} />
                 ))}
               </div>
             )}

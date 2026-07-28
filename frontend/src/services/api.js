@@ -1,8 +1,10 @@
-const BASE_URL = 'https://sportz-xh8v.onrender.com';
+const isProd = import.meta.env.PROD;
+const BASE_URL = import.meta.env.VITE_API_URL || (isProd ? 'https://sportz-xh8v.onrender.com' : 'http://localhost:8000');
 
-export const fetchMatches = async () => {
+export const fetchMatches = async (sport = 'football') => {
   try {
-    const response = await fetch(`${BASE_URL}/matches`);
+    const url = sport ? `${BASE_URL}/matches?sport=${encodeURIComponent(sport)}` : `${BASE_URL}/matches`;
+    const response = await fetch(url);
 
     if (!response.ok) {
       throw new Error('Failed to fetch matches');

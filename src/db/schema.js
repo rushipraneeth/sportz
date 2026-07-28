@@ -4,6 +4,7 @@ export const matchStatusEnum = pgEnum('match_status', ['scheduled', 'live', 'fin
 
 export const matches = pgTable('matches', {
   id: serial('id').primaryKey(),
+  externalId: integer('external_id').unique(),
   sport: text('sport').notNull(),
   homeTeam: text('home_team').notNull(),
   awayTeam: text('away_team').notNull(),
@@ -17,6 +18,7 @@ export const matches = pgTable('matches', {
 
 export const commentary = pgTable('commentary', {
   id: serial('id').primaryKey(),
+  externalId: integer('external_id').unique(),
   matchId: integer('match_id')
     .references(() => matches.id)
     .notNull(),

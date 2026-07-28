@@ -49,6 +49,9 @@ const { broadcastMatchCreated,broadcastCommentary } = attachWebSocketServer(serv
 app.locals.broadcastMatchCreated = broadcastMatchCreated;
 app.locals.broadcastCommentary = broadcastCommentary;
 
+import { startPolling } from './services/polling/pollingService.js';
+startPolling(app.locals);
+
 
 server.on("error", (error) => {
   console.error("HTTP Server Error:", error);

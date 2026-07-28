@@ -7,8 +7,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "seed": "node src/seed/seed.js"
+    "db:migrate": "drizzle-kit migrate"
   },
   "keywords": [],
   "author": "",

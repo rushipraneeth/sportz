@@ -1,5 +1,6 @@
-const WS_URL = "wss://sportz-xh8v.onrender.com/ws";
-
+const isProd = import.meta.env.PROD;
+const WS_URL = import.meta.env.VITE_WS_URL || 
+               (isProd ? "wss://sportz-xh8v.onrender.com/ws" : "ws://localhost:8000/ws");
 class SocketService {
   constructor() {
     this.socket = null;
