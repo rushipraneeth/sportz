@@ -1,15 +1,17 @@
 const isProd = import.meta.env.PROD;
 const WS_URL = import.meta.env.VITE_WS_URL || 
                (isProd ? "wss://sportz-xh8v.onrender.com/ws" : "ws://localhost:8000/ws");
+
 class SocketService {
   constructor() {
     this.socket = null;
     this.listeners = new Map();
     this.connectionListeners = new Set();
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
+    this.maxReconnectAttempts = 6;
     this.reconnectTimeout = null;
     this.currentMatchId = null;
+    this.pingInterval = null;
   }
 
   connect() {
@@ -21,12 +23,26 @@ class SocketService {
       return;
     }
 
-    this.socket = new WebSocket(WS_URL);
+    try {
+      this.socket = new WebSocket(WS_URL);
+    } catch (err) {
+      console.error("Failed to initialize WebSocket:", err);
+      this.attemptReconnect();
+      return;
+    }
 
     this.socket.onopen = () => {
-      console.log("WebSocket Connected");
+      console.log("WebSocket Connected to", WS_URL);
       this.reconnectAttempts = 0;
       this.notifyConnectionState("Connected");
+
+      // Start ping heartbeat
+      clearInterval(this.pingInterval);
+      this.pingInterval = setInterval(() => {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+          this.socket.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 25000);
 
       if (this.currentMatchId) {
         this.subscribe(this.currentMatchId);
@@ -36,22 +52,22 @@ class SocketService {
     this.socket.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        if (!message || !message.type) return;
 
-        if (
-            message.type === "commentary" &&
-            this.listeners.has("commentary")
-        ) {
+        // Dispatch to registered event listeners
+        if (this.listeners.has(message.type)) {
           this.listeners
-              .get("commentary")
-              .forEach((callback) => callback(message.data));
+              .get(message.type)
+              .forEach((callback) => callback(message.data || message));
         }
       } catch (error) {
         console.error("Error parsing WebSocket message:", error);
       }
     };
 
-    this.socket.onclose = () => {
-      console.log("WebSocket Disconnected");
+    this.socket.onclose = (event) => {
+      console.log(`WebSocket Disconnected (code: ${event.code})`);
+      clearInterval(this.pingInterval);
       this.notifyConnectionState("Disconnected");
       this.attemptReconnect();
     };
@@ -67,11 +83,10 @@ class SocketService {
 
       const timeout = Math.min(
           1000 * Math.pow(2, this.reconnectAttempts),
-          10000
+          15000
       );
 
-      console.log(`Reconnecting in ${timeout}ms...`);
-
+      console.log(`Reconnecting WebSocket in ${timeout}ms (attempt ${this.reconnectAttempts})...`);
       clearTimeout(this.reconnectTimeout);
 
       this.reconnectTimeout = setTimeout(() => {
@@ -87,11 +102,25 @@ class SocketService {
       this.socket.send(
           JSON.stringify({
             type: "subscribe",
-            matchId,
+            matchId: Number(matchId),
           })
       );
     } else {
       this.connect();
+    }
+  }
+
+  unsubscribe(matchId) {
+    if (this.currentMatchId === matchId) {
+      this.currentMatchId = null;
+    }
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(
+          JSON.stringify({
+            type: "unsubscribe",
+            matchId: Number(matchId),
+          })
+      );
     }
   }
 
@@ -104,7 +133,6 @@ class SocketService {
 
     return () => {
       const callbacks = this.listeners.get(event);
-
       if (callbacks) {
         callbacks.delete(callback);
       }
@@ -136,6 +164,7 @@ class SocketService {
 
   disconnect() {
     clearTimeout(this.reconnectTimeout);
+    clearInterval(this.pingInterval);
 
     if (this.socket) {
       this.currentMatchId = null;

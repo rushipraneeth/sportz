@@ -9,6 +9,8 @@ export const MATCH_STATUS = {
 export const listMatchesQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).optional(),
   sport: z.string().optional(),
+  status: z.enum(['scheduled', 'live', 'finished']).optional(),
+  refresh: z.coerce.boolean().optional()
 });
 
 export const matchIdParamSchema = z.object({
@@ -19,24 +21,34 @@ export const createMatchSchema = z.object({
   sport: z.string().min(1),
   homeTeam: z.string().min(1),
   awayTeam: z.string().min(1),
+  status: z.string().optional(),
+  statusDetail: z.string().optional(),
   startTime: z.string().refine((val) => !isNaN(Date.parse(val)), {
     message: "Invalid ISO date string",
-  }),
+  }).optional(),
   endTime: z.string().refine((val) => !isNaN(Date.parse(val)), {
     message: "Invalid ISO date string",
-  }),
+  }).optional().nullable(),
   homeScore: z.coerce.number().int().nonnegative().optional(),
   awayScore: z.coerce.number().int().nonnegative().optional(),
+  leagueName: z.string().optional(),
+  leagueLogo: z.string().optional(),
+  homeLogo: z.string().optional(),
+  awayLogo: z.string().optional(),
+  venue: z.string().optional(),
+  elapsed: z.coerce.number().int().nonnegative().optional()
 }).superRefine((data, ctx) => {
-  const start = new Date(data.startTime);
-  const end = new Date(data.endTime);
+  if (data.startTime && data.endTime) {
+    const start = new Date(data.startTime);
+    const end = new Date(data.endTime);
 
-  if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end <= start) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "endTime must be chronologically after startTime",
-      path: ["endTime"],
-    });
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end <= start) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "endTime must be chronologically after startTime",
+        path: ["endTime"],
+      });
+    }
   }
 });
 

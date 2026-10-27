@@ -1,40 +1,45 @@
-import { getFootballMatches, getFootballEvents } from './footballService.js';
-import { getBasketballMatches, getBasketballEvents } from './basketballService.js';
-import { getVolleyballMatches, getVolleyballEvents } from './volleyballService.js';
-import { getHockeyMatches, getHockeyEvents } from './hockeyService.js';
+import { getFootballMatches, getFootballEvents, findFootballMatchInMemory } from './footballService.js';
+import { getBasketballMatches, getBasketballEvents, findBasketballMatchInMemory } from './basketballService.js';
+import { getVolleyballMatches, getVolleyballEvents, findVolleyballMatchInMemory } from './volleyballService.js';
+import { getHockeyMatches, getHockeyEvents, findHockeyMatchInMemory } from './hockeyService.js';
 
 class SportsProvider {
     constructor() {
         this.services = {
             football: {
                 getMatches: getFootballMatches,
-                getMatchEvents: getFootballEvents
+                getMatchEvents: getFootballEvents,
+                findMatchInMemory: findFootballMatchInMemory
             },
             basketball: {
                 getMatches: getBasketballMatches,
-                getMatchEvents: getBasketballEvents
+                getMatchEvents: getBasketballEvents,
+                findMatchInMemory: findBasketballMatchInMemory
             },
             volleyball: {
                 getMatches: getVolleyballMatches,
-                getMatchEvents: getVolleyballEvents
+                getMatchEvents: getVolleyballEvents,
+                findMatchInMemory: findVolleyballMatchInMemory
             },
             hockey: {
                 getMatches: getHockeyMatches,
-                getMatchEvents: getHockeyEvents
+                getMatchEvents: getHockeyEvents,
+                findMatchInMemory: findHockeyMatchInMemory
             }
         };
     }
 
     /**
-     * Get matches for a given sport (with caching).
+     * Get matches for a given sport (with caching and optional forced refresh).
      * @param {string} sport - e.g., 'football'
+     * @param {boolean} forceRefresh
      */
-    async getMatches(sport) {
-        const service = this.services[sport.toLowerCase()];
+    async getMatches(sport = 'football', forceRefresh = false) {
+        const service = this.services[(sport || 'football').toLowerCase()];
         if (!service) {
             throw new Error(`Sport '${sport}' is not supported yet.`);
         }
-        return await service.getMatches();
+        return await service.getMatches(forceRefresh);
     }
 
     /**
@@ -42,12 +47,24 @@ class SportsProvider {
      * @param {string} sport 
      * @param {string|number} externalId 
      */
-    async getMatchEvents(sport, externalId) {
-        const service = this.services[sport.toLowerCase()];
+    async getMatchEvents(sport = 'football', externalId) {
+        const service = this.services[(sport || 'football').toLowerCase()];
         if (!service) {
             throw new Error(`Sport '${sport}' is not supported yet.`);
         }
         return await service.getMatchEvents(externalId);
+    }
+
+    /**
+     * Finds a match by internal id or externalId across all in-memory caches.
+     * @param {number|string} id 
+     */
+    findMatchById(id) {
+        return findFootballMatchInMemory(id) ||
+               findBasketballMatchInMemory(id) ||
+               findHockeyMatchInMemory(id) ||
+               findVolleyballMatchInMemory(id) ||
+               null;
     }
 }
 

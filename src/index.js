@@ -39,14 +39,14 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.send("Hello from Express server!");
 });
-//
-// app.use(securityMiddleware());
+app.use(securityMiddleware());
 
 app.use("/matches", router);
 app.use("/matches/:id/commentary", commentaryRouter);
 
-const { broadcastMatchCreated,broadcastCommentary } = attachWebSocketServer(server);
+const { broadcastMatchCreated, broadcastMatchUpdated, broadcastCommentary } = attachWebSocketServer(server);
 app.locals.broadcastMatchCreated = broadcastMatchCreated;
+app.locals.broadcastMatchUpdated = broadcastMatchUpdated;
 app.locals.broadcastCommentary = broadcastCommentary;
 
 import { startPolling } from './services/polling/pollingService.js';

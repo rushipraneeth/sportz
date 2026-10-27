@@ -1,109 +1,83 @@
 import { WebSocket, WebSocketServer } from "ws";
-import { wsArcjet } from "../arcjet.js";
+import { protectWs } from "../arcjet.js";
 
 const matchSubscribers = new Map();
 
 function subscribe(matchId, socket) {
-    console.log("========== SUBSCRIBE ==========");
-    console.log("Match ID:", matchId);
-    console.log("Type:", typeof matchId);
-
     if (!matchSubscribers.has(matchId)) {
-        console.log("Creating new Set for match", matchId);
         matchSubscribers.set(matchId, new Set());
     }
-
     matchSubscribers.get(matchId).add(socket);
-
-    console.log("Current Subscribers Map:");
-    console.log(matchSubscribers);
-    console.log("===============================");
 }
 
 function unsubscribe(matchId, socket) {
-    console.log("========== UNSUBSCRIBE ==========");
-    console.log("Match ID:", matchId);
-
     const subscribers = matchSubscribers.get(matchId);
-
-    if (!subscribers) {
-        console.log("No subscribers found.");
-        console.log("=================================");
-        return;
-    }
+    if (!subscribers) return;
 
     subscribers.delete(socket);
-
     if (subscribers.size === 0) {
         matchSubscribers.delete(matchId);
-        console.log("Removed empty subscriber set.");
     }
-
-    console.log("Current Subscribers Map:");
-    console.log(matchSubscribers);
-    console.log("=================================");
 }
 
 function cleanUpSubscriptions(socket) {
+    if (!socket.subscriptions) return;
     for (const matchId of socket.subscriptions) {
         unsubscribe(matchId, socket);
     }
+    socket.subscriptions.clear();
 }
 
-function broadcatToMatch(matchId, payload) {
-    console.log("========== BROADCAST ==========");
-    console.log("Broadcasting Match ID:", matchId);
-    console.log("Type:", typeof matchId);
-
-    console.log("Current Subscribers Map:");
-    console.log(matchSubscribers);
-
+function broadcastToMatch(matchId, payload) {
     const subscribers = matchSubscribers.get(matchId);
-
-    console.log("Subscribers:", subscribers);
-
-    if (!subscribers || subscribers.size === 0) {
-        console.log("❌ No subscribers found for Match ID:", matchId);
-        console.log("=================================");
-        return;
-    }
-
-    console.log("✅ Total Subscribers:", subscribers.size);
+    if (!subscribers || subscribers.size === 0) return;
 
     const message = JSON.stringify(payload);
-
     for (const client of subscribers) {
-        console.log("Client ReadyState:", client.readyState);
-
         if (client.readyState === WebSocket.OPEN) {
             client.send(message);
-            console.log("✅ Message sent");
-        } else {
-            console.log("❌ Client not OPEN");
         }
     }
+}
 
-    console.log("=================================");
+function broadCastToAll(wss, payload) {
+    const message = JSON.stringify(payload);
+    for (const client of wss.clients) {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    }
+}
+
+function sendJson(socket, payload) {
+    if (socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify(payload));
 }
 
 function handleMessage(socket, data) {
     let message;
-
     try {
         message = JSON.parse(data.toString());
     } catch {
         sendJson(socket, {
             type: "error",
-            message: "Invalid JSON",
+            message: "Invalid JSON format",
         });
-
         return;
     }
 
-    if (
-        message?.type === "subscribe" &&
-        Number.isInteger(message.matchId)
-    ) {
+    if (!message || typeof message !== 'object') {
+        sendJson(socket, { type: "error", message: "Payload must be a valid JSON object" });
+        return;
+    }
+
+    // Ping / Pong heartbeat
+    if (message.type === "ping") {
+        sendJson(socket, { type: "pong", timestamp: Date.now() });
+        return;
+    }
+
+    if (message.type === "subscribe" && Number.isInteger(message.matchId)) {
         subscribe(message.matchId, socket);
         socket.subscriptions.add(message.matchId);
 
@@ -111,14 +85,10 @@ function handleMessage(socket, data) {
             type: "subscribed",
             matchId: message.matchId,
         });
-
         return;
     }
 
-    if (
-        message?.type === "unsubscribe" &&
-        Number.isInteger(message.matchId)
-    ) {
+    if (message.type === "unsubscribe" && Number.isInteger(message.matchId)) {
         unsubscribe(message.matchId, socket);
         socket.subscriptions.delete(message.matchId);
 
@@ -126,28 +96,13 @@ function handleMessage(socket, data) {
             type: "unsubscribed",
             matchId: message.matchId,
         });
-
         return;
     }
 
     sendJson(socket, {
         type: "error",
-        message: "Unknown message type",
+        message: `Unknown or unhandled message type: ${message.type}`,
     });
-}
-
-function sendJson(socket, payload) {
-    if (socket.readyState !== WebSocket.OPEN) return;
-
-    socket.send(JSON.stringify(payload));
-}
-
-function broadCastToAll(wss, payload) {
-    for (const client of wss.clients) {
-        if (client.readyState !== WebSocket.OPEN) continue;
-
-        client.send(JSON.stringify(payload));
-    }
 }
 
 export function attachWebSocketServer(server) {
@@ -167,25 +122,16 @@ export function attachWebSocketServer(server) {
             process.env.WS_ARCJET_DEBUG === "true" &&
             process.env.NODE_ENV !== "production";
 
-        if (isDebug) {
-            console.log("⚠ Arcjet check skipped (debug mode)");
-        } else {
+        if (!isDebug) {
             try {
-                const decision = await wsArcjet.protect(req);
-
-                console.log("========== WS ARCJET (Upgrade) ==========");
-                console.log("IP:", req.socket.remoteAddress);
-                console.log("Denied:", decision.isDenied());
-                console.log("Reason:", decision.reason);
-                console.log("=========================================");
-
-                if (decision.isDenied()) {
+                const decision = await protectWs(req);
+                if (decision.isDenied && decision.isDenied()) {
                     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
                     socket.destroy();
                     return;
                 }
             } catch (err) {
-                console.error("Arcjet error during upgrade:", err);
+                console.error("[WebSocket] Arcjet error during upgrade:", err.message);
                 socket.write("HTTP/1.1 500 Internal Server Error\r\n\r\n");
                 socket.destroy();
                 return;
@@ -201,44 +147,47 @@ export function attachWebSocketServer(server) {
         console.error("WebSocket Server Error:", error);
     });
 
-    wss.on("connection", (socket, req) => {
-        console.log("==================================");
-        console.log("New WebSocket connection");
-        console.log("IP:", req.socket.remoteAddress);
+    // Heartbeat interval to terminate dead connections
+    const interval = setInterval(() => {
+        wss.clients.forEach((ws) => {
+            if (ws.isAlive === false) {
+                cleanUpSubscriptions(ws);
+                return ws.terminate();
+            }
+            ws.isAlive = false;
+            ws.ping();
+        });
+    }, 30000);
+    interval.unref();
 
+    wss.on("close", () => {
+        clearInterval(interval);
+    });
+
+    wss.on("connection", (socket, req) => {
+        socket.isAlive = true;
         socket.subscriptions = new Set();
 
-        console.log("Client connected successfully");
+        socket.on("pong", () => {
+            socket.isAlive = true;
+        });
 
         sendJson(socket, {
             type: "welcome",
+            timestamp: Date.now(),
         });
 
-        socket.on("message", (data, isBinary) => {
-            console.log("================================");
-            console.log("MESSAGE EVENT TRIGGERED");
-            console.log("Binary:", isBinary);
-            console.log("Raw Buffer:", data);
-            console.log("As String:", data.toString());
-
+        socket.on("message", (data) => {
             handleMessage(socket, data);
-
-            console.log("================================");
         });
 
-        socket.on("close", (code, reason) => {
-            console.log(
-                `Client disconnected (${code}) ${reason.toString()}`
-            );
-
+        socket.on("close", () => {
             cleanUpSubscriptions(socket);
         });
 
         socket.on("error", (err) => {
-            console.error("WebSocket Error:", err);
+            console.error("WebSocket Client Error:", err.message);
         });
-
-        console.log("==================================");
     });
 
     function broadcastMatchCreated(match) {
@@ -248,15 +197,37 @@ export function attachWebSocketServer(server) {
         });
     }
 
+    function broadcastMatchUpdated(match) {
+        const payload = {
+            type: "match_updated",
+            data: match,
+        };
+        // Broadcast to all dashboard clients to update match cards & scores
+        broadCastToAll(wss, payload);
+        // Also send directly to clients focused on this specific match
+        if (match.id) broadcastToMatch(match.id, payload);
+        if (match.externalId && match.externalId !== match.id) {
+            broadcastToMatch(match.externalId, payload);
+        }
+    }
+
     function broadcastCommentary(matchId, comment) {
-        broadcatToMatch(matchId, {
+        const payload = {
             type: "commentary",
-            data: comment,
-        });
+            data: {
+                ...comment,
+                matchId: comment.matchId || matchId
+            },
+        };
+        broadcastToMatch(matchId, payload);
+        if (comment.externalId && comment.externalId !== matchId) {
+            broadcastToMatch(comment.externalId, payload);
+        }
     }
 
     return {
         broadcastMatchCreated,
+        broadcastMatchUpdated,
         broadcastCommentary,
     };
 }
