@@ -49,6 +49,9 @@ app.locals.broadcastMatchCreated = broadcastMatchCreated;
 app.locals.broadcastMatchUpdated = broadcastMatchUpdated;
 app.locals.broadcastCommentary = broadcastCommentary;
 
+import { runMigrations } from "./db/db.js";
+runMigrations().catch(() => {});
+
 import { startPolling } from './services/polling/pollingService.js';
 startPolling(app.locals);
 

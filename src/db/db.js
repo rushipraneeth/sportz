@@ -16,5 +16,16 @@ export const pool = new Pool({
 });
 
 import * as schema from './schema.js';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 
 export const db = drizzle(pool, { schema });
+
+export const runMigrations = async () => {
+  try {
+    console.log('[Database] Checking and applying database migrations...');
+    await migrate(db, { migrationsFolder: './drizzle' });
+    console.log('[Database] Migrations applied successfully.');
+  } catch (err) {
+    console.warn(`[Database] Auto-migration skipped or failed (${err.message}). Resilient dual-mode active.`);
+  }
+};
